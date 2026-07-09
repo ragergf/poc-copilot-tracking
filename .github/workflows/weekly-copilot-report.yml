@@ -1,0 +1,31 @@
+name: Weekly Copilot Report
+
+on:
+  schedule:
+    - cron: '0 9 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Generate Copilot PR report
+        uses: devops-actions/github-copilot-pr-analysis@v1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          analyze_all_repos: 'false'
+        env:
+          GITHUB_REPOSITORY_NAME: ${{ github.event.repository.name }}
+
+      - name: Upload analysis report
+        uses: actions/upload-artifact@v4
+        with:
+          name: copilot-pr-report
+          path: report/pr_analysis_*
+          retention-days: 30
