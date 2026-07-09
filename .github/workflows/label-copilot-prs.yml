@@ -22,7 +22,7 @@ jobs:
             const author = pullRequest.user?.login;
             const labelName = '🤖 copilot-agent';
 
-            if (author !== 'github-copilot[bot]') {
+            if (!['github-copilot[bot]', 'Copilot'].includes(author)) {
               core.info(`Skipping PR from ${author ?? 'unknown author'}.`);
               return;
             }
