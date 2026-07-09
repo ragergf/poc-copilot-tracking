@@ -1,31 +1,80 @@
-name: Weekly Copilot Report
+name: Weekly Copilot PR Report
 
 on:
   schedule:
     - cron: '0 9 * * 1'
   workflow_dispatch:
 
-permissions:
-  contents: read
-
 jobs:
   report:
     runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+      contents: read
+
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Generate Copilot PR report
-        uses: devops-actions/github-copilot-pr-analysis@main
+      - name: Generate Copilot PR Report
+        uses: actions/github-script@v7
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          analyze_all_repos: 'false'
-        env:
-          GITHUB_REPOSITORY_NAME: ${{ github.event.repository.name }}
+          script: |
+            const since = new Date();
+            since.setDate(since.getDate() - 7);
 
-      - name: Upload analysis report
-        uses: actions/upload-artifact@v4
+            const { data: pulls } = await github.rest.pulls.list({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'all',
+              per_page: 100,
+              sort: 'created',
+              direction: 'desc'
+            });
+
+            const allPRs = pulls.filter(pr => 
+              new Date(pr.created_at) >= since
+            );
+
+            const copilotPRs = allPRs.filter(pr => 
+              pr.user.login === 'github-copilot[bot]'
+            );
+
+            const merged = copilotPRs.filter(pr => pr.merged_at);
+            const open = copilotPRs.filter(pr => pr.state === 'open');
+            const closed = copilotPRs.filter(pr => pr.state === 'closed' && !pr.merged_at);
+
+            let report = `# 🤖 Weekly Copilot Agent PR Report\n\n`;
+            report += `**Period:** ${since.toISOString().split('T')[0]} → ${new Date().toISOString().split('T')[0]}\n\n`;
+            report += `## Summary\n\n`;
+            report += `| Metric | Value |\n|--------|-------|\n`;
+            report += `| Total PRs (all authors) | ${allPRs.length} |\n`;
+            report += `| PRs by Copilot agent | ${copilotPRs.length} |\n`;
+            report += `| Copilot PRs merged | ${merged.length} |\n`;
+            report += `| Copilot PRs open | ${open.length} |\n`;
+            report += `| Copilot PRs closed (not merged) | ${closed.length} |\n`;
+            report += `| Copilot adoption % | ${allPRs.length > 0 ? ((copilotPRs.length / allPRs.length) * 100).toFixed(1) : 0}% |\n\n`;
+
+            if (copilotPRs.length > 0) {
+              report += `## Copilot PRs Detail\n\n`;
+              report += `| PR | Title | Status | Created | Additions | Deletions |\n`;
+              report += `|----|-------|--------|---------|-----------|----------|\n`;
+              for (const pr of copilotPRs) {
+                const status = pr.merged_at ? '✅ Merged' : pr.state === 'open' ? '🟡 Open' : '❌ Closed';
+                report += `| #${pr.number} | ${pr.title} | ${status} | ${pr.created_at.split('T')[0]} | +${pr.additions || 0} | -${pr.deletions || 0} |\n`;
+              }
+            } else {
+              report += `> No PRs created by the Copilot coding agent this week.\n`;
+            }
+
+            core.summary.addRaw(report);
+            await core.summary.write();
+            console.log(report);
+
+      - name: Save report as artifact
+        run: |
+          mkdir -p report
+          echo "Report generated at $(date)" > report/weekly-summary.txt
+        
+      - uses: actions/upload-artifact@v4
         with:
-          name: copilot-pr-report
-          path: report/pr_analysis_*
+          name: copilot-pr-report-${{ github.run_number }}
+          path: report/
           retention-days: 30
