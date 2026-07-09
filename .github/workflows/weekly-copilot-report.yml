@@ -16,7 +16,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Generate Copilot PR report
-        uses: devops-actions/github-copilot-pr-analysis@v1
+        uuses: devops-actions/github-copilot-pr-analysis@main
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           analyze_all_repos: 'false'
